@@ -16,7 +16,7 @@ import OpenSSL
 
 public class RSAKey {
     
-    private var key: UnsafeMutablePointer<EVP_PKEY>? = nil
+    private var key: OpaquePointer? = nil
     
     enum keyType {
         case privateKey
@@ -39,43 +39,67 @@ public class RSAKey {
                 p: String? = nil, q: String? = nil,
                 dp: String? = nil, dq: String? = nil,
                 qi: String? = nil) throws {
-        
-        let rsakey = RSA_new()
-        guard rsakey != nil  else {
-            throw JWKError.opensslInternal
-        }
+
         type = .publicKey
-        rsakey?.pointee.n = try base64URLToBignum(n)
-        rsakey?.pointee.e = try base64URLToBignum(e)
-        
+
+        let n_ptr = try base64URLToUInt(n)
+        let n_bn = stringToBigNum(n_ptr.baseAddress, Int32(n_ptr.count))
+
+        let e_ptr = try base64URLToUInt(e)
+        let e_bn = stringToBigNum(e_ptr.baseAddress, Int32(e_ptr.count))
+
+        var d_bn: OpaquePointer? = nil
+        var p_bn: OpaquePointer? = nil
+        var q_bn: OpaquePointer? = nil
+        var dp_bn: OpaquePointer? = nil
+        var dq_bn: OpaquePointer? = nil
+        var qi_bn: OpaquePointer? = nil
+
         if let d = d {
-            rsakey?.pointee.d = try base64URLToBignum(d)
-            type = .privateKey
+           let d_ptr = try base64URLToUInt(d)
+           d_bn = stringToBigNum(d_ptr.baseAddress, Int32(d_ptr.count))
+           type = .privateKey
         }
+
         
+
         // p, q, dmp1, dmq1 and iqmp may be NULL in private keys,
         // but the RSA operations are much faster when these values are available.
         if let p = p {
-            rsakey?.pointee.p = try base64URLToBignum(p)
+           let p_ptr = try base64URLToUInt(p)
+           p_bn = stringToBigNum(p_ptr.baseAddress, Int32(p_ptr.count))
         }
+
         if let q = q {
-            rsakey?.pointee.q = try base64URLToBignum(q)
+           let q_ptr = try base64URLToUInt(q)
+           q_bn = stringToBigNum(q_ptr.baseAddress, Int32(q_ptr.count))
         }
-        if let dq = dq {
-            rsakey?.pointee.dmq1 = try base64URLToBignum(dq)
-        }
+
         if let dp = dp {
-            rsakey?.pointee.dmp1 = try base64URLToBignum(dp)
+           let dp_ptr = try base64URLToUInt(dp)
+           dp_bn = stringToBigNum(dp_ptr.baseAddress, Int32(dp_ptr.count))
         }
+
+        if let dq = dq {
+           let dq_ptr = try base64URLToUInt(dq)
+           dq_bn = stringToBigNum(dq_ptr.baseAddress, Int32(dq_ptr.count))
+        }
+
         if let qi = qi {
-            rsakey?.pointee.iqmp = try base64URLToBignum(qi)
+           let qi_ptr = try base64URLToUInt(qi)
+           qi_bn = stringToBigNum(qi_ptr.baseAddress, Int32(qi_ptr.count))
         }
-        
+
+        let rsakey = RSA_new()
+        RSA_set0_key(rsakey, n_bn, e_bn, d_bn)
+        RSA_set0_factors(rsakey, p_bn, q_bn)
+        RSA_set0_crt_params(rsakey, dp_bn, dq_bn, qi_bn)
+
         // assign RSAkey to EVP_Pkey to keep
         // EVP_PKEY_assign_RSA but complex macro
         // EVP_PKEY_assign((pkey),EVP_PKEY_RSA,(char *)(rsa))
         key = EVP_PKEY_new()
-        EVP_PKEY_assign(key, EVP_PKEY_RSA, rsakey)
+        EVP_PKEY_assign(key, EVP_PKEY_RSA, .make(optional: rsakey))
         guard key != nil else {
             throw JWKError.createKey
         }
@@ -188,23 +212,14 @@ public class RSAKey {
         return String(data: pk, encoding: .utf8)
     }
     
-    
-    // Convert from base64URL to Data to BIGNUM
-    private func base64URLToBignum (_ str: String) throws -> UnsafeMutablePointer<BIGNUM> {
-        
+    private func base64URLToUInt (_ str: String) throws -> UnsafeBufferPointer<UInt8> {
+
         guard let data = str.base64URLDecode() else {
             throw JWKError.decoding
         }
         let array = [UInt8](data)
         return array.withUnsafeBufferPointer { p in
-            
-            // BN_bin2bn() converts the positive integer in big-endian form of length len
-            // at s into a BIGNUM and places it in ret.
-            // If ret is NULL, a new BIGNUM is created.
-            
-            let bn: UnsafeMutablePointer<BIGNUM> = BN_bin2bn(p.baseAddress, Int32(p.count), nil)
-            // BN_print_fp(stdout, bn);
-            return bn
+            return p
         }
     }
 }
