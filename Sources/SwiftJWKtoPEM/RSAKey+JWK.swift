@@ -15,9 +15,9 @@ import Foundation
 import OpenSSL
 
 public class RSAKey {
-    
-    private var key: UnsafeMutablePointer<EVP_PKEY>? = nil
-    
+
+    private var key: OpaquePointer? = nil
+
     enum keyType {
         case privateKey
         case publicKey
@@ -44,38 +44,47 @@ public class RSAKey {
         guard rsakey != nil  else {
             throw JWKError.opensslInternal
         }
+
+        var new_n, new_e, new_d, new_p, new_q, new_dp, new_dq, new_qi: OpaquePointer?
+
         type = .publicKey
-        rsakey?.pointee.n = try base64URLToBignum(n)
-        rsakey?.pointee.e = try base64URLToBignum(e)
-        
+
+        new_n = try base64URLToBignum(n)
+        new_e = try base64URLToBignum(e)
+
         if let d = d {
-            rsakey?.pointee.d = try base64URLToBignum(d)
+            new_d = try base64URLToBignum(d)
             type = .privateKey
         }
         
         // p, q, dmp1, dmq1 and iqmp may be NULL in private keys,
         // but the RSA operations are much faster when these values are available.
         if let p = p {
-            rsakey?.pointee.p = try base64URLToBignum(p)
+            new_p =  try base64URLToBignum(p)
         }
         if let q = q {
-            rsakey?.pointee.q = try base64URLToBignum(q)
+            new_q = try base64URLToBignum(q)
         }
         if let dq = dq {
-            rsakey?.pointee.dmq1 = try base64URLToBignum(dq)
+            new_dq = try base64URLToBignum(dq)
         }
         if let dp = dp {
-            rsakey?.pointee.dmp1 = try base64URLToBignum(dp)
+            new_dp = try base64URLToBignum(dp)
         }
         if let qi = qi {
-            rsakey?.pointee.iqmp = try base64URLToBignum(qi)
+            new_qi = try base64URLToBignum(qi)
         }
-        
+
+        // openssl 1.1.x setter methods for setting data in RSA object
+        RSA_set0_key(rsakey, new_n, new_e, new_d)
+        RSA_set0_factors(rsakey, new_p, new_q)
+        RSA_set0_crt_params(rsakey, new_dp, new_dq, new_qi)
+
         // assign RSAkey to EVP_Pkey to keep
         // EVP_PKEY_assign_RSA but complex macro
         // EVP_PKEY_assign((pkey),EVP_PKEY_RSA,(char *)(rsa))
         key = EVP_PKEY_new()
-        EVP_PKEY_assign(key, EVP_PKEY_RSA, rsakey)
+        EVP_PKEY_assign(key, EVP_PKEY_RSA, .make(optional: rsakey))
         guard key != nil else {
             throw JWKError.createKey
         }
@@ -188,22 +197,21 @@ public class RSAKey {
         return String(data: pk, encoding: .utf8)
     }
     
-    
-    // Convert from base64URL to Data to BIGNUM
-    private func base64URLToBignum (_ str: String) throws -> UnsafeMutablePointer<BIGNUM> {
-        
+   // Convert from base64URL to Data to BIGNUM
+    private func base64URLToBignum (_ str: String) throws -> OpaquePointer {
+
         guard let data = str.base64URLDecode() else {
             throw JWKError.decoding
         }
         let array = [UInt8](data)
         return array.withUnsafeBufferPointer { p in
-            
+
             // BN_bin2bn() converts the positive integer in big-endian form of length len
             // at s into a BIGNUM and places it in ret.
             // If ret is NULL, a new BIGNUM is created.
-            
-            let bn: UnsafeMutablePointer<BIGNUM> = BN_bin2bn(p.baseAddress, Int32(p.count), nil)
-            // BN_print_fp(stdout, bn);
+
+            let bn: OpaquePointer = BN_bin2bn(p.baseAddress, Int32(p.count), nil)
+            //BN_print_fp(stdout, bn)
             return bn
         }
     }
