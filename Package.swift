@@ -7,7 +7,7 @@ var dependencies: [Package.Dependency] = []
 var targetDependencies: [Target.Dependency] = []
 
 #if os(Linux)
-dependencies.append(.package(url: "https://github.com/IBM-Swift/OpenSSL.git", from: "2.0.0"))
+dependencies.append(.package(url: "https://github.com/nethraravindran/OpenSSL.git", .branch("jwk-to-pem")))
 targetDependencies.append(.byName(name: "OpenSSL"))
 #else
 dependencies.append(.package(url: "https://github.com/IBM-Swift/OpenSSL-OSX.git", from: "0.5.0"))
