@@ -12,7 +12,7 @@ let package = Package(
             targets: ["SwiftJWKtoPEM"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/nethraravindran/OpenSSL.git", .branch("openssl-11")),
+        .package(url: "https://github.com/IBM-Swift/OpenSSL.git", from: "2.0.0"),
     ],
     targets: [
         // Targets are the basic building blocks of a package. A target can define a module or a test suite.
